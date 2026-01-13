@@ -1,0 +1,7 @@
+python-dotenv
+groq
+streamlit
+sentence-transformers
+requests
+watchdog
+numpy
