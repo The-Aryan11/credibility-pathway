@@ -1,4 +1,4 @@
-pathway>=0.8.0
+pathway[all]>=0.8.0
 python-dotenv
 groq
 streamlit
