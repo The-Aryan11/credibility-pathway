@@ -8,3 +8,5 @@ numpy
 fpdf2
 deep-translator
 pydeck
+streamlit-webrtc
+SpeechRecognition
