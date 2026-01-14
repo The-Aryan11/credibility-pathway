@@ -1,8 +1,18 @@
+---
+title: Credibility Backend
+emoji: 🧠
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 🔍 Real-Time Credibility Engine
 
 **Built with Pathway + Groq for Inter-IIT Hackathon**
 
-## What It Does
+## What It Doe
 
 A real-time misinformation tracking system that:
 1. Ingests live news articles using Pathway's streaming engine
