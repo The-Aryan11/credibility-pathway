@@ -1,7 +1,10 @@
+pathway[all]>=0.8.0
+fastapi
+uvicorn
 python-dotenv
 groq
-streamlit
 sentence-transformers
 requests
-watchdog
 numpy
+scikit-learn
+pandas
