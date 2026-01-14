@@ -2,7 +2,10 @@ pathway>=0.8.0
 python-dotenv
 groq
 streamlit
-sentence-transformers
 requests
 watchdog
 numpy
+fpdf2
+deep-translator
+pydeck
+scikit-learn
