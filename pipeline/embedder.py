@@ -1,73 +1,55 @@
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+import os
+import requests
 import numpy as np
+from dotenv import load_dotenv
 
-print("✅ Lightweight TF-IDF embedder loaded!")
+load_dotenv()
 
-# Global vectorizer (lightweight, no GPU needed)
-vectorizer = TfidfVectorizer(
-    max_features=1000,
-    stop_words='english',
-    ngram_range=(1, 2)
-)
+HF_API_KEY = os.getenv("HF_API_KEY")
+API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
 
-# Store for fitted state
-_is_fitted = False
-_corpus = []
+headers = {"Authorization": f"Bearer {HF_API_KEY}"} if HF_API_KEY else {}
 
-def fit_vectorizer(texts: list):
-    """Fit the vectorizer on a corpus of texts"""
-    global _is_fitted, _corpus
-    if texts:
-        _corpus = texts
-        vectorizer.fit(texts)
-        _is_fitted = True
-        print(f"✅ Vectorizer fitted on {len(texts)} documents")
+print("✅ Hugging Face API embedder loaded!")
 
 def get_embedding(text: str) -> list:
-    """Convert text to TF-IDF vector"""
-    global _is_fitted
-    
-    if not _is_fitted:
-        # Fit on single document if not fitted
-        vectorizer.fit([text])
-        _is_fitted = True
-    
+    """Get embedding from Hugging Face API (FREE, no local RAM)"""
     try:
-        vector = vectorizer.transform([text]).toarray()[0]
-        return vector.tolist()
-    except:
-        # Return zero vector if error
-        return [0.0] * 1000
+        response = requests.post(
+            API_URL,
+            headers=headers,
+            json={"inputs": text[:500], "options": {"wait_for_model": True}}
+        )
+        
+        if response.status_code == 200:
+            embedding = response.json()
+            # Handle nested list response
+            if isinstance(embedding, list) and len(embedding) > 0:
+                if isinstance(embedding[0], list):
+                    # Average pooling for sentence embedding
+                    embedding = np.mean(embedding, axis=0).tolist()
+                return embedding
+        else:
+            print(f"⚠️ API error: {response.status_code}")
+            return [0.0] * 384
+            
+    except Exception as e:
+        print(f"❌ Embedding error: {e}")
+        return [0.0] * 384
 
 def get_embeddings(texts: list) -> list:
-    """Convert multiple texts to TF-IDF vectors"""
-    global _is_fitted
-    
-    if not _is_fitted:
-        vectorizer.fit(texts)
-        _is_fitted = True
-    
-    try:
-        vectors = vectorizer.transform(texts).toarray()
-        return vectors.tolist()
-    except:
-        return [[0.0] * 1000 for _ in texts]
+    """Get embeddings for multiple texts"""
+    embeddings = []
+    for text in texts:
+        emb = get_embedding(text)
+        embeddings.append(emb)
+    return embeddings
 
-def compute_similarity(text1: str, text2: str) -> float:
-    """Compute cosine similarity between two texts"""
+def compute_similarity(vec1: list, vec2: list) -> float:
+    """Compute cosine similarity"""
     try:
-        vec1 = get_embedding(text1)
-        vec2 = get_embedding(text2)
-        
-        # Cosine similarity
-        dot = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-        
-        if norm1 == 0 or norm2 == 0:
-            return 0.0
-        
-        return float(dot / (norm1 * norm2))
+        a = np.array(vec1)
+        b = np.array(vec2)
+        return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
     except:
         return 0.0

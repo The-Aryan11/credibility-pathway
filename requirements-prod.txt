@@ -8,4 +8,3 @@ numpy
 fpdf2
 deep-translator
 pydeck
-scikit-learn
