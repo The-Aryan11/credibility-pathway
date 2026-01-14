@@ -1,90 +1,91 @@
 """
-PDF Report Generator for Credibility Engine
+Lightweight Report Generator (HTML/Text)
+Uses 0MB Server RAM - Renders in User's Browser
 """
-from fpdf import FPDF
 from datetime import datetime
 
-class CredibilityReport(FPDF):
-    def header(self):
-        self.set_font('Arial', 'B', 16)
-        self.cell(0, 10, 'Credibility Engine - Fact Check Report', 0, 1, 'C')
-        self.set_font('Arial', 'I', 10)
-        self.cell(0, 5, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
-        self.ln(10)
-    
-    def footer(self):
-        self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f'Page {self.page_no()} | © 2025 Aryan & Khushboo', 0, 0, 'C')
-
-def generate_report(claim: str, result: dict, sources: list = None) -> bytes:
-    """Generate a PDF report for a fact-check analysis"""
-    pdf = CredibilityReport()
-    pdf.add_page()
-    
-    # Claim
-    pdf.set_font('Arial', 'B', 14)
-    pdf.cell(0, 10, 'Claim Analyzed:', 0, 1)
-    pdf.set_font('Arial', '', 12)
-    
-    # Handle encoding
-    safe_claim = claim.encode('latin-1', 'replace').decode('latin-1')
-    pdf.multi_cell(0, 8, safe_claim)
-    pdf.ln(5)
-    
-    # Results
-    pdf.set_font('Arial', 'B', 14)
-    pdf.cell(0, 10, 'Analysis Results:', 0, 1)
+def generate_report(claim: str, result: dict, sources: list = None) -> str:
+    """Generate a printable HTML report"""
     
     score = result.get('score', 50)
     verdict = result.get('verdict', 'UNVERIFIED')
     category = result.get('category', 'OTHER')
-    confidence_low = result.get('confidence_low', score - 10)
-    confidence_high = result.get('confidence_high', score + 10)
-    
-    pdf.set_font('Arial', '', 12)
-    pdf.cell(0, 8, f'Credibility Score: {score}%', 0, 1)
-    pdf.cell(0, 8, f'Confidence Range: {confidence_low}% - {confidence_high}%', 0, 1)
-    pdf.cell(0, 8, f'Verdict: {verdict}', 0, 1)
-    pdf.cell(0, 8, f'Category: {category}', 0, 1)
-    pdf.ln(5)
-    
-    # Reasoning
-    pdf.set_font('Arial', 'B', 14)
-    pdf.cell(0, 10, 'Reasoning:', 0, 1)
-    pdf.set_font('Arial', '', 11)
     reasoning = result.get('reasoning', 'No reasoning available')
-    safe_reasoning = reasoning.encode('latin-1', 'replace').decode('latin-1')
-    pdf.multi_cell(0, 7, safe_reasoning)
-    pdf.ln(5)
+    date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # Evidence
-    pdf.set_font('Arial', 'B', 14)
-    pdf.cell(0, 10, 'Key Evidence:', 0, 1)
-    pdf.set_font('Arial', '', 11)
+    # HTML Template
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Credibility Report - {claim[:20]}</title>
+        <style>
+            body {{ font-family: sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }}
+            .header {{ text-align: center; border-bottom: 2px solid #3b82f6; padding-bottom: 20px; }}
+            .box {{ background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 5px solid #3b82f6; }}
+            .score {{ font-size: 24px; font-weight: bold; }}
+            h2 {{ color: #1e3a8a; border-bottom: 1px solid #eee; margin-top: 30px; }}
+            .source {{ padding: 5px; background: #f1f5f9; margin-bottom: 5px; }}
+            .footer {{ margin-top: 50px; font-size: 12px; color: #666; text-align: center; border-top: 1px solid #eee; padding-top: 10px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🔍 Credibility Analysis Report</h1>
+            <p>Generated: {date_str}</p>
+        </div>
+
+        <div class="section">
+            <h2>Claim Analyzed</h2>
+            <p><em>"{claim}"</em></p>
+        </div>
+
+        <div class="box">
+            <div class="score">Score: {score}%</div>
+            <p><strong>Verdict:</strong> {verdict} | <strong>Category:</strong> {category}</p>
+        </div>
+
+        <div class="section">
+            <h2>AI Analysis</h2>
+            <p>{reasoning}</p>
+        </div>
+
+        <div class="section">
+            <h2>Key Evidence</h2>
+            <ul>
+    """
     
-    evidence = result.get('key_evidence', [])
-    if evidence:
-        for i, e in enumerate(evidence, 1):
-            safe_e = str(e).encode('latin-1', 'replace').decode('latin-1')
-            pdf.multi_cell(0, 7, f'{i}. {safe_e}')
-    else:
-        pdf.cell(0, 8, 'No specific evidence identified', 0, 1)
-    pdf.ln(5)
+    for e in result.get('key_evidence', []):
+        html += f"<li>{e}</li>"
     
-    # Sources
+    html += """
+            </ul>
+        </div>
+        
+        <div class="section">
+            <h2>Sources Referenced</h2>
+    """
+    
     if sources:
-        pdf.set_font('Arial', 'B', 14)
-        pdf.cell(0, 10, 'Sources Used:', 0, 1)
-        pdf.set_font('Arial', '', 10)
-        for source in sources:
-            source_name = source.get('source', 'Unknown') if isinstance(source, dict) else str(source)
-            safe_source = source_name.encode('latin-1', 'replace').decode('latin-1')
-            pdf.cell(0, 6, f'- {safe_source}', 0, 1)
-    
-    # Disclaimer
-    pdf.ln(10)
-    pdf.set_font('Arial', 'I', 9)
-    pdf.multi_cell(0, 5, 'Disclaimer: This analysis is generated by AI and should be used as a starting point. Always verify important claims through multiple authoritative sources.')
-    
-    return pdf.output()
+        for s in sources:
+            name = s.get('source', 'Unknown') if isinstance(s, dict) else str(s)
+            html += f'<div class="source">📰 {name}</div>'
+    else:
+        html += "<p>No specific sources linked.</p>"
+        
+    html += """
+        </div>
+
+        <div class="footer">
+            <p>© 2025 Aryan & Khushboo • Powered by Pathway + Groq</p>
+            <p>Disclaimer: AI-generated. Verify with official sources.</p>
+        </div>
+        
+        <script>
+            // Auto-print when opened
+            window.onload = function() { setTimeout(function() { window.print(); }, 500); }
+        </script>
+    </body>
+    </html>
+    """
+    return html
