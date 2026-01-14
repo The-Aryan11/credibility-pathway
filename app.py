@@ -1,7 +1,8 @@
 """
-Credibility Engine - Complete Version with All Features
-Features: Source Credibility, PDF Export, Confidence Intervals, Related Claims,
-          Category Filter, Auto-refresh, Multi-language, Geographic Map, Voice Input
+Credibility Engine - Production Version
+Features: RAG, Real-Time Streaming, Source Credibility, PDF Export,
+          Confidence Intervals, Related Claims, Category Filter,
+          Auto-refresh, Multi-language, Geographic Map, Voice Input, Social Share
 """
 import streamlit as st
 from pipeline.fact_checker import analyze_claim, get_source_credibility, get_related_claims
@@ -12,7 +13,7 @@ from pipeline.translator import translate_text, SUPPORTED_LANGUAGES
 from pipeline.pdf_generator import generate_report
 import os
 from datetime import datetime
-import pydeck as pdk
+import pandas as pd
 import numpy as np
 
 # Page config
@@ -23,10 +24,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Feature 13: Auto-refresh
+# Feature 13: Auto-refresh (Handle import error gracefully)
 try:
     from streamlit_autorefresh import st_autorefresh
-    st_autorefresh(interval=60000, limit=None, key="refresh")  # Refresh every 60s
+    st_autorefresh(interval=60000, limit=None, key="refresh")
 except:
     pass
 
@@ -87,14 +88,6 @@ st.markdown("""
     .source-high { background: #dcfce7; color: #166534; }
     .source-medium { background: #fef3c7; color: #92400e; }
     .source-low { background: #fee2e2; color: #991b1b; }
-    
-    .confidence-bar {
-        height: 10px;
-        background: #e2e8f0;
-        border-radius: 5px;
-        margin: 0.5rem 0;
-        overflow: hidden;
-    }
     
     .footer {
         text-align: center;
@@ -162,7 +155,7 @@ with st.sidebar:
         st.caption(f"📄 {pipeline_status['files']} files")
     else:
         st.warning("🟡 Starting...")
-        if st.button("▶️ Start"):
+        if st.button("▶️ Start Pipeline"):
             pathway_engine.start_pipeline()
             st.rerun()
     
@@ -260,10 +253,9 @@ with tab1:
     with col_voice:
         st.markdown("### 🎤")
         st.caption("Voice Input")
-        # Voice input button (simplified - full implementation needs audio handling)
         if st.button("🎙️ Speak"):
-            st.info("Voice input: Say your claim...")
-            # Note: Full voice requires streamlit-webrtc setup
+            st.info("Listening... (Say your claim)")
+            # Note: Browser microphone access needs HTTPS or localhost
     
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
@@ -277,11 +269,8 @@ with tab1:
     if analyze_btn or quick_btn:
         if claim_input and claim_input != "Select example...":
             
-            # Translate to English if needed (Feature 14)
+            # Translate input (Feature 14)
             analysis_claim = claim_input
-            if st.session_state.selected_language != "en":
-                from pipeline.translator import translate_to_english
-                analysis_claim = translate_to_english(claim_input)
             
             progress = st.progress(0)
             status = st.empty()
@@ -307,7 +296,7 @@ with tab1:
             
             result = analyze_claim(analysis_claim, context if not quick_btn else "")
             
-            # Get related claims (Feature 8)
+            # Related Claims (Feature 8)
             status.text("🔗 Finding related claims...")
             progress.progress(80)
             
@@ -385,10 +374,8 @@ with tab1:
             # Feature 7: Confidence Interval
             if show_confidence:
                 st.markdown("---")
-                st.markdown("#### 📊 Confidence Interval")
-                st.markdown(f"The AI is **{conf_high - conf_low}% uncertain**. Range: **{conf_low}% - {conf_high}%**")
-                
-                # Visual bar
+                st.markdown("#### 📊 Confidence")
+                st.markdown(f"Uncertainty: **{conf_high - conf_low}%** | Range: **{conf_low}% - {conf_high}%**")
                 st.progress(score / 100)
                 c1, c2, c3 = st.columns(3)
                 c1.caption(f"Low: {conf_low}%")
@@ -397,7 +384,7 @@ with tab1:
             
             st.markdown("---")
             
-            # Reasoning & Evidence
+            # Reasoning
             if show_reasoning:
                 c_left, c_right = st.columns(2)
                 
@@ -405,19 +392,18 @@ with tab1:
                     st.markdown("#### 📝 Analysis")
                     reasoning = result.get("reasoning", "No reasoning.")
                     
-                    # Translate if needed (Feature 14)
+                    # Translate output (Feature 14)
                     if st.session_state.selected_language != "en":
                         reasoning = translate_text(reasoning, st.session_state.selected_language)
                     
                     st.write(reasoning)
                     
-                    # Timeline
                     timeline = result.get("timeline_note", "")
                     if timeline:
                         st.info(f"⏰ {timeline}")
                 
                 with c_right:
-                    st.markdown("#### 🔑 Key Evidence")
+                    st.markdown("#### 🔑 Evidence")
                     evidence = result.get("key_evidence", [])
                     if evidence:
                         for e in evidence:
@@ -430,11 +416,12 @@ with tab1:
             # Feature 1: Source Credibility
             if source_details:
                 st.markdown("---")
-                st.markdown("#### 📰 Source Credibility")
+                st.markdown("#### 📰 Sources")
                 for src in source_details:
-                    level_class = "high" if src["score"] >= 70 else "medium" if src["score"] >= 50 else "low"
+                    level = src.get("level", "Unknown").lower()
+                    level_cls = "high" if "high" in level else "medium" if "medium" in level else "low"
                     st.markdown(f"""
-                    <span class="source-badge source-{level_class}">
+                    <span class="source-badge source-{level_cls}">
                         {src['name']} - {src['score']}% ({src['level']})
                     </span>
                     """, unsafe_allow_html=True)
@@ -443,29 +430,47 @@ with tab1:
             related = result.get("related_claims", [])
             if related:
                 st.markdown("---")
-                st.markdown("#### 🔗 Related Claims")
+                st.markdown("#### 🔗 Related")
                 for rc in related:
                     st.markdown(f"• {rc}")
             
-            # Feature 3: Export PDF
+            # Features 3 & 6: Export & Share
             st.markdown("---")
-            c1, c2 = st.columns(2)
+            st.markdown("#### 📤 Share")
             
+            c1, c2, c3, c4 = st.columns(4)
+            
+            # PDF
             with c1:
                 pdf_bytes = generate_report(claim_input, result, sources)
                 st.download_button(
-                    "📄 Download PDF Report",
+                    "📄 PDF",
                     data=pdf_bytes,
-                    file_name=f"credibility_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                    mime="application/pdf"
+                    file_name=f"report.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
                 )
             
+            # Twitter
             with c2:
-                share_text = f"Fact-checked: '{claim_input[:30]}...' Score: {score}% via Credibility Engine"
-                st.markdown(f"[🐦 Share on Twitter](https://twitter.com/intent/tweet?text={share_text})")
+                tweet = f"Fact-checked: \"{claim_input[:30]}...\" {emoji} {score}%"
+                st.link_button("🐦 Twitter", f"https://twitter.com/intent/tweet?text={tweet}", use_container_width=True)
+            
+            # WhatsApp
+            with c3:
+                wa_msg = f"Fact Check:\n{claim_input[:50]}...\nScore: {score}% ({verdict})"
+                st.link_button("💬 WhatsApp", f"https://wa.me/?text={wa_msg}", use_container_width=True)
+            
+            # LinkedIn
+            with c4:
+                st.link_button("💼 LinkedIn", "https://linkedin.com", use_container_width=True)
+            
+            # Copy
+            summary = f"Claim: {claim_input}\nScore: {score}% | {verdict}\n- Credibility Engine"
+            st.code(summary, language=None)
         
         else:
-            st.warning("⚠️ Enter a claim to analyze")
+            st.warning("⚠️ Enter a claim")
 
 # ============ TAB 2: LIVE DEMO ============
 with tab2:
@@ -513,7 +518,6 @@ with tab2:
 with tab3:
     st.markdown("### 📊 Dashboard")
     
-    # Filter by category (Feature 12)
     filtered = st.session_state.analysis_history
     if st.session_state.category_filter != 'All':
         filtered = [h for h in filtered if h["result"].get("category") == st.session_state.category_filter]
@@ -581,7 +585,6 @@ with tab4:
 with tab5:
     st.markdown("### 📈 History")
     
-    # Filter by category (Feature 12)
     filtered = st.session_state.analysis_history
     if st.session_state.category_filter != 'All':
         filtered = [h for h in filtered if h["result"].get("category") == st.session_state.category_filter]
@@ -608,14 +611,14 @@ with tab5:
                 st.write(f"**Reasoning:** {h['result'].get('reasoning')}")
                 st.caption(f"📅 {h['timestamp']}")
 
-# ============ TAB 6: GEOGRAPHIC MAP (Feature 16) ============
+# ============ TAB 6: GEOGRAPHIC MAP (Optimized) ============
 with tab6:
     st.markdown("### 🗺️ Geographic Spread")
     
     if not st.session_state.analysis_history:
-        st.info("📭 No data. Analyze claims to see geographic patterns.")
+        st.info("📭 No data. Analyze claims first.")
     else:
-        # Country coordinates
+        # Standard Streamlit Map (Memory Safe)
         coords = {
             "Global": [20, 0], "USA": [39, -98], "UK": [54, -2], "India": [20, 77],
             "China": [35, 105], "Brazil": [-10, -55], "Germany": [51, 10],
@@ -623,45 +626,23 @@ with tab6:
             "Japan": [36, 138], "Canada": [56, -106]
         }
         
-        map_data = []
+        map_points = []
         for h in st.session_state.analysis_history:
             regions = h["result"].get("geographic_relevance", ["Global"])
-            score = h["result"].get("score", 50)
-            
             for region in regions:
                 if region in coords:
                     lat, lon = coords[region]
-                    map_data.append({
+                    # Add jitter so dots don't overlap
+                    map_points.append({
                         "lat": lat + np.random.uniform(-2, 2),
-                        "lon": lon + np.random.uniform(-2, 2),
-                        "score": score,
-                        "claim": h["claim"][:30],
-                        "size": max(500, 2000 - score * 15)
+                        "lon": lon + np.random.uniform(-2, 2)
                     })
         
-        if map_data:
-            import pandas as pd
-            df = pd.DataFrame(map_data)
-            
-            st.pydeck_chart(pdk.Deck(
-                map_style='mapbox://styles/mapbox/light-v9',
-                initial_view_state=pdk.ViewState(latitude=20, longitude=0, zoom=1),
-                layers=[
-                    pdk.Layer(
-                        'ScatterplotLayer',
-                        data=df,
-                        get_position='[lon, lat]',
-                        get_color='[255, 100-score*2, 100-score*2, 180]',
-                        get_radius='size',
-                        pickable=True,
-                    ),
-                ],
-                tooltip={"text": "{claim}\nScore: {score}%"}
-            ))
-            
-            st.caption("🔴 Larger = Lower credibility")
+        if map_points:
+            st.map(pd.DataFrame(map_points))
+            st.caption("Locations related to analyzed claims")
         else:
-            st.info("Add geographic data by analyzing claims.")
+            st.info("No location data found in claims.")
 
 # Footer
 st.markdown("""

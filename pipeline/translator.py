@@ -1,42 +1,29 @@
-"""
-Multi-language Support using FREE Google Translate
-"""
-from deep_translator import GoogleTranslator
+import os
+from groq import Groq
+from dotenv import load_dotenv
+
+load_dotenv()
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 SUPPORTED_LANGUAGES = {
-    "en": "English",
-    "hi": "Hindi",
-    "es": "Spanish",
-    "fr": "French",
-    "de": "German",
-    "pt": "Portuguese",
-    "ar": "Arabic",
-    "zh-CN": "Chinese",
-    "ja": "Japanese",
-    "ko": "Korean",
-    "ru": "Russian",
-    "ta": "Tamil",
-    "te": "Telugu",
-    "bn": "Bengali"
+    "en": "English", "es": "Spanish", "hi": "Hindi", 
+    "fr": "French", "de": "German", "zh": "Chinese"
 }
 
 def translate_text(text: str, target_lang: str) -> str:
-    """Translate text to target language (FREE)"""
+    """Translate using Groq LLM (High quality, 0 RAM)"""
     if not text or target_lang == "en":
         return text
     
     try:
-        translated = GoogleTranslator(source='auto', target=target_lang).translate(text)
-        return translated
-    except Exception as e:
-        print(f"Translation error: {e}")
-        return text
-
-def translate_to_english(text: str) -> str:
-    """Translate any language to English"""
-    try:
-        translated = GoogleTranslator(source='auto', target='en').translate(text)
-        return translated
-    except Exception as e:
-        print(f"Translation error: {e}")
+        completion = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": f"Translate this text to {SUPPORTED_LANGUAGES.get(target_lang, 'English')}. Return ONLY the translation, nothing else."},
+                {"role": "user", "content": text}
+            ],
+            temperature=0.1
+        )
+        return completion.choices[0].message.content.strip()
+    except:
         return text
