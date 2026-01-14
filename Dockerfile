@@ -2,18 +2,17 @@ FROM python:3.11
 
 WORKDIR /app
 
-# Copy requirements
+# Install system dependencies (Fix for libGL error)
+RUN apt-get update && apt-get install -y \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy Code
 COPY . .
+RUN mkdir -p data/articles
+RUN chmod -R 777 /app
 
-# Create data directory with permissions
-RUN mkdir -p data/articles && chmod -R 777 data
-
-# Expose HF Port
-EXPOSE 7860
-
-# Run API
 CMD ["python", "main.py"]
